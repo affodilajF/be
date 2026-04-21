@@ -1,0 +1,18 @@
+# Directories to ignore
+application/videos/
+application/video_res/
+application/tmp_image_res/
+application/tmp/
+application/venv/
+
+# Database
+application/sql_app.db
+application/sql_app.db-shm
+application/sql_app.db-wal
+
+# Python bits
+**/__pycache__/
+*.pyc
+
+# Local settings
+.env
