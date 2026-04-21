@@ -38,7 +38,6 @@ class Setting(Base):
 
     top_roi = Column(Integer, default=25)
     bottom_roi = Column(Integer, default=75)
-    entry_direction = Column(String, default="top")
     frame_interval = Column(Integer, default=2)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

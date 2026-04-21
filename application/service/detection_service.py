@@ -319,9 +319,8 @@ def get_detection_settings_db(user_id: int):
                 return {
                     "top_roi": settings.top_roi,
                     "bottom_roi": settings.bottom_roi,
-                    "entry_direction": settings.entry_direction
                 }
-            return {"top_roi": 25, "bottom_roi": 75, "entry_direction": "top"}
+            return {"top_roi": 25, "bottom_roi": 75}
         except:
             raise
 
