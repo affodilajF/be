@@ -1,4 +1,5 @@
 from ultralytics import YOLO
+from ultralytics.utils.plotting import Annotator, colors
 import cv2, os
 import json
 import time
@@ -16,8 +17,13 @@ IMAGE_OUTPUT_DIR = r"tmp_image_res"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(IMAGE_OUTPUT_DIR, exist_ok=True)
 
-# model = YOLO(MODEL_PATH) - Moved into run_inference for parallel safety
-# model.verbose = False
+def is_overlapping(box1, box2, thresh=0.5):
+    """Cek apakah box1 (APD) berada di dalam/beririsan dengan box2 (Person)"""
+    xA = max(box1[0], box2[0]); yA = max(box1[1], box2[1])
+    xB = min(box1[2], box2[2]); yB = min(box1[3], box2[3])
+    inter = max(0, xB - xA) * max(0, yB - yA)
+    area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    return inter / max(1, area1) >= thresh
 
 
 def calculate_roi_from_video(cap, top_percent, bottom_percent):
@@ -72,75 +78,94 @@ def check_apd(person_id, person_box, frame_boxes, frame_classes, compilance_res,
         if inter_area / obj_area >= overlap_thresh:
             compilance_res[person_id][label] = True
 
-def save_person_crop(person_id, box, frame):
+def save_person_crop(person_id, person_box, frame, r):
     """
-    Save person crop image to IMAGE_OUTPUT_DIR and return (path, binary_data).
+    Hanya menggambar anotasi untuk orang yang bersangkutan dan APD-nya.
+    Diproses hanya 1x saat akan disimpan ke database.
     """
     img_name = f"person_{person_id}_{int(time.time())}.jpg"
     img_path = os.path.join(IMAGE_OUTPUT_DIR, img_name)
     
-    x1, y1, x2, y2 = map(int, box)
-    padding = 10
-    h, w = frame.shape[:2]
-    x1, y1, x2, y2 = max(0, x1 - padding), max(0, y1 - padding), min(w, x2 + padding), min(h, y2 + padding)
+    # 1. Gunakan Annotator pada salinan frame asli
+    ann = Annotator(frame.copy(), line_width=2)
     
-    crop = frame[y1:y2, x1:x2]
+    if r.boxes is not None:
+        for d in r.boxes:
+            box = d.xyxy[0]
+            cls = int(d.cls)
+            label = r.names[cls]
+            
+            should_draw = False
+            if label == "person":
+                # Hanya gambar kotak orang yang sedang kita simpan ID-nya
+                if d.id is not None and int(d.id) == person_id:
+                    should_draw = True
+            else:
+                # Gambar APD jika memang menempel (overlapping) dengan orang ini
+                if is_overlapping(box, person_box):
+                    should_draw = True
+            
+            if should_draw:
+                ann.box_label(box, label, color=colors(cls, True))
+
+    work_frame = ann.result()
+
+    # 2. Proses Crop
+    px1, py1, px2, py2 = map(int, person_box)
+    pad = 50 
+    h, w = work_frame.shape[:2]
+    px1, py1, px2, py2 = max(0, px1-pad), max(0, py1-pad), min(w, px2+pad), min(h, py2+pad)
+    
+    crop = work_frame[py1:py2, px1:px2]
     if crop.size > 0:
         cv2.imwrite(img_path, crop)
-        # Encode to binary for DB storage
         success, buffer = cv2.imencode(".jpg", crop)
         if success:
             return buffer.tobytes()
     return None
 
-def check_person_in_roi(frame, boxes, classes, ids, person_states, compilance_res, roi_top, roi_bottom, model_names, do_apd_check=True, current_dt=None):
+
+def check_person_in_roi(frame, r, person_states, compilance_res, roi_top, roi_bottom, do_apd_check=True, current_dt=None):
     status = []
-    if boxes is None or len(boxes) == 0: return status
+    if r.boxes is None: return status
+
+    boxes = r.boxes.xyxy.cpu().numpy()
+    classes = r.boxes.cls.cpu().numpy().astype(int)
+    ids = r.boxes.id.cpu().numpy() if r.boxes.id is not None else np.array([None] * len(boxes))
+    model_names = r.names
 
     for i, box in enumerate(boxes):
         cls = int(classes[i]); label = str(model_names[cls])
         if label != "person": continue
         person_id = int(ids[i]) if ids[i] is not None else None
-        x1, y1, x2, y2 = map(int, box)
+        px1, py1, px2, py2 = map(int, box)
+
 
         if person_id not in person_states: person_states[person_id] = {"bottom_touched": False}
         state = person_states[person_id]
 
 
-        if y1 <= roi_bottom <= y2:
-            # Check if this is the transition to bottom_touched
+        if py1 <= roi_bottom <= py2:
             if not state["bottom_touched"] and person_id in compilance_res:
                 apd = compilance_res[person_id]
-                # Check if any APD is missing and no image saved yet
                 if "image_data" not in apd:
                     missing = any(not apd.get(k, False) for k in ["apron", "gloves", "boots", "mask", "hairnet"])
                     if missing:
-                        img_data = save_person_crop(person_id, box, frame)
+                        img_data = save_person_crop(person_id, box, frame, r)
                         if img_data:
                             compilance_res[person_id]["image_data"] = img_data
 
             state["bottom_touched"] = True
             roi_text = "no"
-        elif not state["bottom_touched"] and roi_top <= y2:
+        elif not state["bottom_touched"] and roi_top <= py2:
             roi_text = "yes"
             if do_apd_check: check_apd(person_id, box, boxes, classes, compilance_res, model_names, current_dt=current_dt)
         else:
             roi_text = "no"
 
-        # if y1 <= roi_bottom <= y2 and not state["top_touched"]:
-        #     state["bottom_touched"] = True
-        #     roi_text = "no"
-        # elif y1 >= roi_bottom and state["top_touched"]:
-        #     state["bottom_touched"] = True
-        #     roi_text = "no"
-        # elif not state["bottom_touched"] and y1 <= roi_top <= y2:
-        #     state["top_touched"] = True
-        #     roi_text = "yes"
-        #     if do_apd_check: check_apd(person_id, box, boxes, classes, compilance_res)
-        # else:
-        #     roi_text = "no"
         status.append((person_id, roi_text))
     return status
+
 
 def overlay_info(frame, person_status):
     start_y = 30; line_height = 25
@@ -155,18 +180,19 @@ def process_frame(frame, model, person_states, compilance_res, roi_top, roi_bott
     results = model.track(frame, persist=True, tracker="trackers/bytetrack.yaml", verbose=False)
     r = results[0]
 
-    annotated = r.plot(line_width=2, conf=False, font_size=0.8)
-    annotated = draw_roi_lines(annotated, roi_top, roi_bottom)
+    # 1. Plot untuk tampilan Video Utama (Bawaan YOLO -> ID muncul, Gayanya rapi)
+    annotated_video = r.plot(line_width=2, conf=False, font_size=0.8)
+    annotated_video = draw_roi_lines(annotated_video, roi_top, roi_bottom)
 
-    boxes = r.boxes.xyxy.cpu().numpy() if r.boxes else np.array([])
-    classes = r.boxes.cls.cpu().numpy().astype(int) if r.boxes else np.array([])
-    ids = r.boxes.id.cpu().numpy() if r.boxes.id is not None else np.array([None] * len(boxes))
-    model_names = model.names
+    # 2. Proses ROI & Logika Simpan (Menggunakan frame asli untuk kebersihan)
+    # Anotasi eksklusif untuk database akan dikerjakan di dalam save_person_crop hanya saat diperlukan.
+    status = check_person_in_roi(frame, r, person_states, compilance_res, roi_top, roi_bottom, do_apd_check, current_dt=current_dt)
+    
+    # 3. Tambahkan info status overlay ke video
+    annotated_video = overlay_info(annotated_video, status)
 
-    status = check_person_in_roi(frame, boxes, classes, ids, person_states, compilance_res, roi_top, roi_bottom, model_names, do_apd_check, current_dt=current_dt)
-    annotated = overlay_info(annotated, status)
+    return annotated_video
 
-    return annotated
 
 def run_inference(video_path, save_video=True, metadata=None):
     # Initialize separate model per request for parallel safety
