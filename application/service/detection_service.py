@@ -23,7 +23,6 @@ async def handle_inference_upload(
     date: str,
     time: str,
     video,
-    # thumbnail,
     save_video: bool,
     user_id: str,
     db: Session
@@ -68,7 +67,6 @@ async def handle_inference_upload(
         user_id=int(user_id),
         name=name,
         video_datetime=video_dt,
-        video_path=tmp_path,
         job_status="Running",
         stored_status="Not Decided", 
         total_frames = total_frames,

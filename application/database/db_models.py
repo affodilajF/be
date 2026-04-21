@@ -58,7 +58,6 @@ class DetectionJobs(Base):
     # metadata
     name = Column(String)
     video_datetime = Column(DateTime)
-    thumbnail_path = Column(String)
 
     # status
     job_status = Column(String, default="Running")  # Running, Done, Failed, Error
@@ -68,8 +67,6 @@ class DetectionJobs(Base):
     total_frames = Column(Integer, default=0)
     video_fps = Column(Float)
     video_duration = Column(Float)  # in seconds
-    video_path = Column(String)
-    video_result_path = Column(String)
 
     video_datetime_end = Column(DateTime)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
