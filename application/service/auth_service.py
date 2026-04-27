@@ -39,19 +39,33 @@ def signup_user(user: UserSignupSchema, db: Session):
 
 def login_user(user: UserLoginSchema, db: Session):
     db_user = db.query(User).filter(User.email == user.email).first()
-    if db_user and verify_password(user.password, db_user.password):
-        return signJWT(str(db_user.id), db_user.username)
-    
-    return JSONResponse(
-        status_code=401,
-        content={
-            "error": {
-                "code": 401,
-                "message": "Wrong login details!",
-                "data": user.email
+
+    if not db_user:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": 404,
+                    "message": "User not found!",
+                    "data": user.email
+                }
             }
-        }
-    )
+        )
+
+    # Cek password
+    if not verify_password(user.password, db_user.password):
+        return JSONResponse(
+            status_code=401,
+            content={
+                "error": {
+                    "code": 401,
+                    "message": "Wrong password!",
+                    "data": user.email
+                }
+            }
+        )
+
+    return signJWT(str(db_user.id), db_user.username)
 
 def refresh_user_token(payload: RefreshSchema, db: Session):
     token_data = decodeJWT(payload.refresh_token)

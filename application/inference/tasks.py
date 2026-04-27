@@ -35,6 +35,10 @@ def process_video_task(job_id, gen, tmp_path):
                 if "total_frames" in data_dict:
                     update_job_info_db(job_id, total_frames=data_dict["total_frames"])
     finally:
-        # Hapus file video sementara setelah selesai atau jika error
-        if os.path.exists(tmp_path):
+        # Hapus file sementara setelah selesai atau jika error
+        if isinstance(tmp_path, list):
+            for p in tmp_path:
+                if os.path.exists(p):
+                    os.remove(p)
+        elif tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)

@@ -57,7 +57,8 @@ class DetectionJobs(Base):
 
     # metadata
     name = Column(String)
-    video_datetime = Column(DateTime)
+    data_datetime = Column(DateTime)
+    source_type = Column(String) # VIDEO or IMAGE
 
     # status
     job_status = Column(String, default="Running")  # Running, Done, Failed, Error
@@ -68,7 +69,7 @@ class DetectionJobs(Base):
     video_fps = Column(Float)
     video_duration = Column(Float)  # in seconds
 
-    video_datetime_end = Column(DateTime)
+    data_datetime_end = Column(DateTime)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # RELATIONSHIPS
@@ -78,7 +79,6 @@ class DetectionJobs(Base):
         back_populates="job",
         cascade="all, delete"
     )
-
 
 # ======================
 # DETECTION RESULTS (per person)

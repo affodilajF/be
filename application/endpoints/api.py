@@ -9,6 +9,7 @@ import asyncio
 from database.db_schemas import DetectionParameter
 from service.detection_service import (
     handle_inference_upload,
+    handle_inference_upload_images,
     get_detection_list,
     get_not_decided_detection,
     update_detection_store_status,
@@ -44,6 +45,24 @@ async def inference_upload(
     
     return await handle_inference_upload(
         background_tasks, name, date, time, video, save_video, user_id, db
+    )
+
+## acc
+@router.post("/api/run-ai-model-images")
+async def inference_upload_images(
+    background_tasks: BackgroundTasks,
+    name: str = Form(...),
+    date: str = Form(...),
+    time: str = Form(...),
+    images: list[UploadFile] = File(...),
+    token: str = Depends(JWTBearer()),
+    db: Session = Depends(get_db)
+):
+    payload = decodeJWT(token)
+    user_id = payload.get("user_id")
+    
+    return await handle_inference_upload_images(
+        background_tasks, name, date, time, images, user_id, db
     )
 
 # acc

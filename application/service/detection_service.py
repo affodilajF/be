@@ -7,7 +7,7 @@ import base64
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
 
-from inference.inference import run_inference
+from inference.inference import run_inference, run_inference_images
 from inference.jobs import inference_jobs
 from inference.tasks import process_video_task
 from database.db_models import DetectionJobs, Setting, DetectionResult
@@ -52,27 +52,28 @@ async def handle_inference_upload(
         "date": date,
         "time": time,
         "user_id": user_id,
-        "video_datetime": video_dt.isoformat(),
+        "data_datetime": video_dt.isoformat(),
         "created_at": datetime.now(WIB).replace(microsecond=0).isoformat()
     }
 
     # Panggil run_inference untuk dapat total_frames, fps, durasi dan generator-nya
     total_frames, fps, duration, gen = run_inference(tmp_path, save_video=save_video, metadata=metadata)
     
-    video_dt_end = video_dt + timedelta(seconds=duration)
+    video_dt_end = (video_dt + timedelta(seconds=duration)).replace(microsecond=0)
 
     # Create new detection job in database
     new_detection = DetectionJobs(
         id=job_id,
         user_id=int(user_id),
         name=name,
-        video_datetime=video_dt,
+        data_datetime=video_dt,
+        source_type="VIDEO",
         job_status="Running",
         stored_status="Not Decided", 
         total_frames = total_frames,
         video_fps = fps,
         video_duration = duration,
-        video_datetime_end = video_dt_end,
+        data_datetime_end = video_dt_end,
         created_at = datetime.now(WIB).replace(microsecond=0)
     )
     db.add(new_detection)
@@ -101,6 +102,95 @@ async def handle_inference_upload(
             "video_datetime_end": video_dt_end
         }
     }
+
+
+async def handle_inference_upload_images(
+    background_tasks,
+    name: str,
+    date: str,
+    time: str,
+    images: list,
+    user_id: str,
+    db: Session
+):
+    print(f"handle inference upload images: {len(images)} images")
+    timestamp = datetime.now(WIB).strftime("%Y%m%d_%H%M%S")
+    os.makedirs(TMP_DIR, exist_ok=True)
+    os.makedirs(THUMBNAIL_DIR, exist_ok=True)
+    job_id = str(uuid.uuid4())
+
+    tmp_paths = []
+    for idx, image in enumerate(images):
+        tmp_path = os.path.join(TMP_DIR, f"uploaded_{timestamp}_{idx}_{image.filename}")
+        content = await image.read()
+        with open(tmp_path, "wb") as f:
+            f.write(content)
+        tmp_paths.append(tmp_path)
+
+    # Combine date and time
+    try:
+        # Assuming format YYYY-MM-DD HH:MM:SS from client
+        video_dt = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M:%S").replace(tzinfo=WIB)
+    except:
+        video_dt = datetime.now(WIB).replace(microsecond=0)
+
+    metadata = {
+        "job_id": job_id,
+        "name": name,
+        "date": date,
+        "time": time,
+        "user_id": user_id,
+        "data_datetime": video_dt.isoformat(),
+        "created_at": datetime.now(WIB).replace(microsecond=0).isoformat()
+    }
+
+    # Panggil run_inference_images
+    total_frames, fps, duration, gen = run_inference_images(tmp_paths, metadata=metadata)
+    
+    video_dt_end = video_dt # For image, end is same as start
+
+    # Create new detection job in database
+    new_detection = DetectionJobs(
+        id=job_id,
+        user_id=int(user_id),
+        name=name,
+        data_datetime=video_dt,
+        source_type="IMAGE",
+        job_status="Running",
+        stored_status="Not Decided", 
+        total_frames = total_frames,
+        video_fps = fps,
+        video_duration = duration,
+        data_datetime_end = video_dt_end,
+        created_at = datetime.now(WIB).replace(microsecond=0)
+    )
+    db.add(new_detection)
+    db.commit()
+    db.refresh(new_detection)
+
+
+    # Still using legacy inference_jobs for SSE tracking
+    inference_jobs[job_id] = {
+        "status": "Running",
+        "progress": {},
+        "result": None,
+        "new_event": False
+    }
+
+    background_tasks.add_task(process_video_task, job_id, gen, tmp_paths)
+
+    return {
+        "success": True,
+        "message": f"Inference started for {len(images)} images",
+        "data": {
+            "job_id": job_id,
+            "total_frames": total_frames,
+            # "video_fps": fps,
+            # "video_duration": duration,
+            # "video_datetime_end": video_dt_end
+        }
+    }
+
 
 
 def get_detection_result_list(user_id: str, db: Session):
@@ -134,8 +224,9 @@ def get_detection_result_list(user_id: str, db: Session):
         results.append({
             "job_id": job.id,
             "name": job.name,
-            "video_datetime": job.video_datetime,
-            "video_datetime_end": job.video_datetime_end,
+            "source_type": job.source_type,
+            "data_datetime": job.data_datetime,
+            "data_datetime_end": job.data_datetime_end,
             "video_fps": job.video_fps,
             "video_duration": job.video_duration,
             "created_at": job.created_at,
@@ -191,10 +282,11 @@ def get_detection_list(user_id: str, page: int, limit: int, db: Session):
         results.append({
             "job_id": job.id,
             "job_status": job.job_status,
+            "source_type": job.source_type,
             "stored_status": job.stored_status,
             "name": job.name,
-            "video_datetime": job.video_datetime,
-            "video_datetime_end": job.video_datetime_end,
+            "data_datetime": job.data_datetime,
+            "data_datetime_end": job.data_datetime_end,
             "video_fps": job.video_fps,
             "video_duration": job.video_duration,
             "total_frames": job.total_frames,
@@ -282,10 +374,11 @@ def get_not_decided_detection(user_id: str, db: Session):
         "data": {
             "job_id": job.id,
             "job_status": job.job_status,
+            "source_type": job.source_type,
             "stored_status": job.stored_status,
             "name": job.name,
-            "video_datetime": job.video_datetime,
-            "video_datetime_end": job.video_datetime_end,
+            "data_datetime": job.data_datetime,
+            "data_datetime_end": job.data_datetime_end,
             "video_fps": job.video_fps,
             "video_duration": job.video_duration,
             "total_frames": job.total_frames,
@@ -309,30 +402,6 @@ def update_detection_store_status(store_status, job_id: str, db: Session):
     return JSONResponse(status_code=404, content={"message": "Job not found"})
 
 
-def get_detection_settings_db(user_id: int):
-    with SessionLocal() as db:
-        try:
-            settings = db.query(Setting).filter(Setting.user_id == user_id).first()
-            if settings:
-                return {
-                    "top_roi": settings.top_roi,
-                    "bottom_roi": settings.bottom_roi,
-                }
-            return {"top_roi": 25, "bottom_roi": 75}
-        except:
-            raise
 
-def update_job_info_db(job_id: str, status: str = None, total_frames: int = None, video_result_path: str = None):
-    with SessionLocal() as db:
-        try:
-            job = db.query(DetectionJobs).filter(DetectionJobs.id == job_id).first()
-            if job:
-                if status: job.job_status = status
-                if total_frames is not None: job.total_frames = total_frames
-                if video_result_path: job.video_result_path = video_result_path
-                db.commit()
-        except:
-            db.rollback()
-            raise
 
 
