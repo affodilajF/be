@@ -26,7 +26,7 @@ def draw_roi_lines(frame, roi_top, roi_bottom):
     cv2.putText(frame, "ROI BOTTOM", (10, roi_bottom - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
     return frame
 
-def check_apd(person_id, person_box, frame_boxes, frame_classes, compilance_res, model_names, overlap_thresh=0.5, current_dt=None):
+def check_apd(person_id, person_box, frame_boxes, frame_classes, compilance_res, model_names, overlap_thresh=0.8, current_dt=None):
     if person_id is None: return
     person_id = int(person_id)
     if person_id not in compilance_res:
