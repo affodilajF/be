@@ -16,4 +16,3 @@ class RefreshSchema(BaseModel):
 class DetectionParameter(BaseModel):
     top_roi: int
     bottom_roi: int
-    frame_interval: int

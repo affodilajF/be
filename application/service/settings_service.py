@@ -15,7 +15,6 @@ def set_parameters(payload: DetectionParameter, user_id: str, db: Session):
     # Update (baik data baru atau lama)
     db_setting.top_roi = payload.top_roi
     db_setting.bottom_roi = payload.bottom_roi
-    db_setting.frame_interval = payload.frame_interval
 
     db.commit()
     db.refresh(db_setting)
@@ -24,8 +23,7 @@ def set_parameters(payload: DetectionParameter, user_id: str, db: Session):
         "success": True,
         "data": {
             "top_roi": db_setting.top_roi,
-            "bottom_roi": db_setting.bottom_roi,
-            "frame_interval" : db_setting.frame_interval
+            "bottom_roi": db_setting.bottom_roi
         }
     }
 
@@ -37,8 +35,7 @@ def get_parameters(user_id: str, db: Session):
             "success": True,
             "data": {
                 "top_roi": 25,
-                "bottom_roi": 75,
-                "frame_interval" : 2
+                "bottom_roi": 75
             }
         }
     
@@ -46,7 +43,6 @@ def get_parameters(user_id: str, db: Session):
         "success": True,
         "data": {
             "top_roi": db_setting.top_roi,
-            "bottom_roi": db_setting.bottom_roi,
-            "frame_interval" : db_setting.frame_interval
+            "bottom_roi": db_setting.bottom_roi
         }
     }

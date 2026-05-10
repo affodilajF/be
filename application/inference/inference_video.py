@@ -24,7 +24,7 @@ def create_video_writer(cap, output_path):
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
     return cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
 
-def check_person_in_roi(frame, r, person_states, compilance_res, roi_top, roi_bottom, do_apd_check=True, current_dt=None):
+def check_person_in_roi(frame, r, person_states, compilance_res, roi_top, roi_bottom, current_dt=None):
     status = []
     if r.boxes is None: return status
 
@@ -56,21 +56,21 @@ def check_person_in_roi(frame, r, person_states, compilance_res, roi_top, roi_bo
             roi_text = "no"
         elif not state["bottom_touched"] and roi_top <= py2:
             roi_text = "yes"
-            if do_apd_check: check_apd(person_id, box, boxes, classes, compilance_res, model_names, current_dt=current_dt)
+            check_apd(person_id, box, boxes, classes, compilance_res, model_names, current_dt=current_dt)
         else:
             roi_text = "no"
 
         status.append((person_id, roi_text))
     return status
 
-def process_frame(frame, model, person_states, compilance_res, roi_top, roi_bottom, do_apd_check=True, current_dt=None):
+def process_frame(frame, model, person_states, compilance_res, roi_top, roi_bottom, current_dt=None):
     results = model.track(frame, persist=True, tracker="trackers/bytetrack.yaml", verbose=False)
     r = results[0]
 
     annotated_video = r.plot(line_width=2, conf=False, font_size=0.8)
     annotated_video = draw_roi_lines(annotated_video, roi_top, roi_bottom)
 
-    status = check_person_in_roi(frame, r, person_states, compilance_res, roi_top, roi_bottom, do_apd_check, current_dt=current_dt)
+    status = check_person_in_roi(frame, r, person_states, compilance_res, roi_top, roi_bottom, current_dt=current_dt)
     annotated_video = overlay_info(annotated_video, status)
 
     return annotated_video
@@ -82,10 +82,9 @@ def run_inference(video_path, save_video=True, metadata=None):
     user_id = metadata.get("user_id") if metadata else None
     job_id = metadata.get("job_id") if metadata else None
     
-    settings = get_detection_settings_db(int(user_id)) if user_id else {"top_roi": 25, "bottom_roi": 75, "frame_interval": 2}
+    settings = get_detection_settings_db(int(user_id)) if user_id else {"top_roi": 25, "bottom_roi": 75}
     top_percent = settings["top_roi"]
     bottom_percent = settings["bottom_roi"]
-    apd_every_n_frames = settings.get("frame_interval", 2)
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -119,8 +118,7 @@ def run_inference(video_path, save_video=True, metadata=None):
                     break
 
                 current_dt = (video_start_dt + timedelta(seconds=frame_count / fps)).replace(microsecond=0) if video_start_dt else None
-                do_apd_check = (frame_count % apd_every_n_frames == 0)
-                annotated = process_frame(frame, model, person_states, compilance_res, roi_top, roi_bottom, do_apd_check, current_dt=current_dt)
+                annotated = process_frame(frame, model, person_states, compilance_res, roi_top, roi_bottom, current_dt=current_dt)
 
                 if save_video and writer:
                     writer.write(annotated)

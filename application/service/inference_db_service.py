@@ -11,10 +11,9 @@ def get_detection_settings_db(user_id: int):
             if settings:
                 return {
                     "top_roi": settings.top_roi,
-                    "bottom_roi": settings.bottom_roi,
-                    "frame_interval": settings.frame_interval
+                    "bottom_roi": settings.bottom_roi
                 }
-            return {"top_roi": 25, "bottom_roi": 75,"frame_interval": 2}
+            return {"top_roi": 25, "bottom_roi": 75}
         except:
             raise
 
