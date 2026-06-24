@@ -405,3 +405,267 @@ def update_detection_store_status(store_status, job_id: str, db: Session):
 
 
 
+def get_compliance_stats_service(user_id: str, search: str, start_date: str, end_date: str, db: Session):
+    # Fetch detections joined with jobs
+    query = db.query(DetectionResult, DetectionJobs).join(DetectionJobs).filter(
+        DetectionJobs.user_id == int(user_id),
+        DetectionJobs.stored_status == "Stored"
+    )
+
+    if search:
+        query = query.filter(DetectionJobs.name.ilike(f"%{search}%"))
+    
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=WIB)
+            query = query.filter(DetectionJobs.data_datetime >= start_dt)
+        except Exception as e:
+            print(f"Error parsing start_date: {e}")
+
+    if end_date:
+        try:
+            # End of day
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=WIB) + timedelta(days=1) - timedelta(seconds=1)
+            query = query.filter(DetectionJobs.data_datetime <= end_dt)
+        except Exception as e:
+            print(f"Error parsing end_date: {e}")
+
+    results = query.order_by(DetectionJobs.data_datetime.asc()).all()
+
+    stats = {
+        "apron": {"pass": 0, "fail": 0},
+        "gloves": {"pass": 0, "fail": 0},
+        "boots": {"pass": 0, "fail": 0},
+        "mask": {"pass": 0, "fail": 0},
+        "hairnet": {"pass": 0, "fail": 0},
+        "totalDetections": len(results),
+        "totalViolations": 0,
+        "totalCompliant": 0,
+        "complianceScore": 100,
+        "dailyTrend": [],
+        "hourlyTrend": [{"hour": i, "rate": 100, "apronFail": 0, "glovesFail": 0, "bootsFail": 0, "maskFail": 0, "hairnetFail": 0, "total": 0, "violations": 0} for i in range(24)],
+        "ppeFailCounts": {},
+        "perJobStats": {}
+    }
+
+    trend_map = {}
+
+    for res, job in results:
+        ppe_status = [
+            {"key": "Apron", "val": res.apron, "countKey": "apron"},
+            {"key": "Gloves", "val": res.gloves, "countKey": "gloves"},
+            {"key": "Boots", "val": res.boots, "countKey": "boots"},
+            {"key": "Mask", "val": res.mask, "countKey": "mask"},
+            {"key": "Hairnet", "val": res.hairnet, "countKey": "hairnet"},
+        ]
+
+        has_violation = any(not p["val"] for p in ppe_status)
+        if has_violation:
+            stats["totalViolations"] += 1
+
+        # Use data_datetime from job or detection_time from res
+        dt = job.data_datetime
+        if dt:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=WIB)
+            
+            date_key = dt.strftime("%Y-%m-%d")
+            if date_key not in trend_map:
+                trend_map[date_key] = {
+                    "total": 0, "violations": 0, "apronFail": 0, "glovesFail": 0,
+                    "bootsFail": 0, "maskFail": 0, "hairnetFail": 0
+                }
+            
+            trend_map[date_key]["total"] += 1
+            if has_violation:
+                trend_map[date_key]["violations"] += 1
+            
+            hour = dt.hour
+            stats["hourlyTrend"][hour]["total"] += 1
+            if has_violation:
+                stats["hourlyTrend"][hour]["violations"] += 1
+        
+        for p in ppe_status:
+            is_pass = p["val"]
+            if is_pass:
+                stats[p["countKey"]]["pass"] += 1
+            else:
+                stats[p["countKey"]]["fail"] += 1
+                stats["ppeFailCounts"][p["key"]] = stats["ppeFailCounts"].get(p["key"], 0) + 1
+                
+                if dt:
+                    if p["key"] == "Apron":
+                        trend_map[date_key]["apronFail"] += 1
+                        stats["hourlyTrend"][hour]["apronFail"] += 1
+                    elif p["key"] == "Gloves":
+                        trend_map[date_key]["glovesFail"] += 1
+                        stats["hourlyTrend"][hour]["glovesFail"] += 1
+                    elif p["key"] == "Boots":
+                        trend_map[date_key]["bootsFail"] += 1
+                        stats["hourlyTrend"][hour]["bootsFail"] += 1
+                    elif p["key"] == "Mask":
+                        trend_map[date_key]["maskFail"] += 1
+                        stats["hourlyTrend"][hour]["maskFail"] += 1
+                    elif p["key"] == "Hairnet":
+                        trend_map[date_key]["hairnetFail"] += 1
+                        stats["hourlyTrend"][hour]["hairnetFail"] += 1
+
+        if job.name:
+            if job.name not in stats["perJobStats"]:
+                stats["perJobStats"][job.name] = {"total": 0, "violations": 0}
+            stats["perJobStats"][job.name]["total"] += 1
+            if has_violation:
+                stats["perJobStats"][job.name]["violations"] += 1
+
+    stats["totalCompliant"] = stats["totalDetections"] - stats["totalViolations"]
+
+    # Calculate final rates for hourly trend
+    for h in stats["hourlyTrend"]:
+        if h["total"] > 0:
+            h["rate"] = round(((h["total"] - h["violations"]) / h["total"]) * 100)
+        else:
+            h["rate"] = 100
+
+    if stats["totalDetections"] > 0:
+        stats["complianceScore"] = round(
+            ((stats["totalDetections"] - stats["totalViolations"]) / stats["totalDetections"]) * 100
+        )
+
+    # Daily Trend
+    sorted_dates = sorted(trend_map.keys())
+    for d_key in sorted_dates:
+        t = trend_map[d_key]
+        stats["dailyTrend"].append({
+            "date": d_key,
+            "rate": round(((t["total"] - t["violations"]) / t["total"]) * 100) if t["total"] > 0 else 100,
+            "apronFail": t["apronFail"],
+            "glovesFail": t["glovesFail"],
+            "bootsFail": t["bootsFail"],
+            "maskFail": t["maskFail"],
+            "hairnetFail": t["hairnetFail"],
+            "total": t["total"],
+            "violations": t["violations"]
+        })
+
+    # Generate verbal summary
+    verbal_summary = generate_verbal_summary_python(stats, search, start_date, end_date)
+
+    # Separate trends from stats
+    trends = {
+        "dailyTrend": stats.pop("dailyTrend"),
+        "hourlyTrend": stats.pop("hourlyTrend")
+    }
+
+    return {
+        "success": True,
+        "data": {
+            "stats": stats,
+            "trends": trends,
+            "summary": verbal_summary
+        }
+    }
+
+def generate_verbal_summary_python(stats, search, start_date, end_date):
+    if stats["totalDetections"] == 0:
+        return "No data found for the selected filters."
+
+    # 1. Date Range Detection
+    sorted_days = sorted(stats["dailyTrend"], key=lambda x: x["date"])
+    min_date = sorted_days[0]["date"] if sorted_days else None
+    max_date = sorted_days[-1]["date"] if sorted_days else None
+
+    # Get Today in WIB
+    today_wib = datetime.now(WIB).strftime("%Y-%m-%d")
+
+    def format_date_str(d_str):
+        if not d_str: return "N/A"
+        try:
+            dt = datetime.strptime(d_str, "%Y-%m-%d")
+            return dt.strftime("%B %d, %Y")
+        except:
+            return d_str
+
+    effective_end_date = end_date or today_wib
+    
+    observation_period = ""
+    if min_date:
+        start_fmt = format_date_str(start_date or min_date)
+        end_fmt = format_date_str(effective_end_date)
+        observation_period = f"over the observation period of **{start_fmt} to {end_fmt}**"
+
+    # 2. PPE Violations Analysis
+    ppe_fail_list = [
+        {"name": 'Apron', "fail": stats["apron"]["fail"]},
+        {"name": 'Gloves', "fail": stats["gloves"]["fail"]},
+        {"name": 'Boots', "fail": stats["boots"]["fail"]},
+        {"name": 'Mask', "fail": stats["mask"]["fail"]},
+        {"name": 'Hairnet', "fail": stats["hairnet"]["fail"]},
+    ]
+
+    VIOLATION_RECOMMENDATIONS = {
+        'Gloves': "==glove availability at entrance be reviewed==",
+        'Mask': "==workers be reminded of mask protocol before entering==",
+        'Hairnet': "==hairnet stock at changing area be checked==",
+        'Boots': "==boot storage and sizing availability be inspected==",
+        'Apron': "==apron supply be ensured sufficient per shift==",
+    }
+
+    max_fail = max(p["fail"] for p in ppe_fail_list)
+    min_fail = min(p["fail"] for p in ppe_fail_list)
+
+    most_frequent_violations = [p for p in ppe_fail_list if p["fail"] == max_fail and p["fail"] > 0]
+    most_frequent_names = [f"**{p['name']}**" for p in most_frequent_violations]
+    highest_compliance_items = [f"**{p['name']}**" for p in ppe_fail_list if p["fail"] == min_fail and p["fail"] == 0]
+
+    compliant_rate = round((stats["totalCompliant"] / stats["totalDetections"]) * 100) if stats["totalDetections"] > 0 else 0
+    violation_rate = round((stats["totalViolations"] / stats["totalDetections"]) * 100) if stats["totalDetections"] > 0 else 0
+
+    # Paragraph 1: Overview & PPE
+    summary = f"Based on all-time recorded data {observation_period}, a total of **{stats['totalDetections']} workers** were observed, with **{stats['totalCompliant']} workers ({compliant_rate}%)** fully compliant and **{stats['totalViolations']} workers ({violation_rate}%)** recorded with at least one PPE violation. "
+
+    if most_frequent_names:
+        if len(most_frequent_names) > 1:
+            name_list = ", ".join(most_frequent_names[:-1]) + " and " + most_frequent_names[-1]
+        else:
+            name_list = most_frequent_names[0]
+
+        if len(most_frequent_violations) == 1:
+            recommendation = VIOLATION_RECOMMENDATIONS.get(most_frequent_violations[0]["name"], "==availability and protocol adherence be reviewed==")
+        else:
+            recommendation = "==availability and protocol adherence for these items be reviewed=="
+
+        summary += f"The most frequent violation was the absence of {name_list} ({max_fail} cases), and it is recommended that {recommendation}. "
+
+    if highest_compliance_items:
+        if len(highest_compliance_items) > 1:
+            h_list = ", ".join(highest_compliance_items[:-1]) + " and " + highest_compliance_items[-1]
+        else:
+            h_list = highest_compliance_items[0]
+        summary += f"{h_list} recorded no violations throughout the observation period.\n\n"
+    else:
+        summary += "\n\n"
+
+    # Paragraph 2: Daily Trend
+    if sorted_days:
+        best_day = max(sorted_days, key=lambda x: x["rate"])
+        worst_day = min(sorted_days, key=lambda x: x["rate"])
+
+        summary += f"Daily trend analysis shows the best compliance was recorded on {format_date_str(best_day['date'])} (**{best_day['rate']}%**), while the worst was on {format_date_str(worst_day['date'])} (**{worst_day['rate']}%**).\n\n"
+
+    # Paragraph 3: Hourly Trend
+    active_hours = [h for h in stats["hourlyTrend"] if h["total"] > 0]
+    if active_hours:
+        zero_hours = [f"**{str(h['hour']).zfill(2)}:00**" for h in active_hours if h["rate"] == 0]
+
+        summary += "Hourly trend analysis reveals compliance rate was variable throughout the day, "
+
+        if zero_hours:
+            if len(zero_hours) > 1:
+                z_list = ", ".join(zero_hours[:-1]) + " and " + zero_hours[-1]
+            else:
+                z_list = zero_hours[0]
+            summary += f"with notable drops to **0%** at {z_list}. ==Targeted supervision is recommended during these hours== to improve overall compliance."
+        else:
+            summary += "with no hours showing complete non-compliance. ==Continued monitoring is recommended== to identify recurring low-compliance patterns."
+
+    return summary

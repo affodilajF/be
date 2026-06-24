@@ -14,7 +14,8 @@ from service.detection_service import (
     get_not_decided_detection,
     update_detection_store_status,
     get_detection_results_by_job_id,
-    get_detection_result_list
+    get_detection_result_list,
+    get_compliance_stats_service
 )
 from service.settings_service import (
     set_parameters,
@@ -162,3 +163,15 @@ async def detection_result_list_data(
     payload = decodeJWT(token)
     user_id = payload.get("user_id")
     return get_detection_result_list(user_id, db)
+
+@router.get("/api/compliance-stats")
+async def compliance_stats(
+    search: str = Query(None),
+    startDate: str = Query(None),
+    endDate: str = Query(None),
+    token: str = Depends(JWTBearer()),
+    db: Session = Depends(get_db)
+):
+    payload = decodeJWT(token)
+    user_id = payload.get("user_id")
+    return get_compliance_stats_service(user_id, search, startDate, endDate, db)
