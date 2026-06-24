@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Form, Query, BackgroundTasks, Depends
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from database.database import get_db
 from app.auth_bearer import JWTBearer
@@ -27,6 +27,7 @@ from inference.jobs import inference_jobs
 router = APIRouter()
 
 ## acc
+# Untuk menjalankan proses deteksi AI dari video
 @router.post("/api/run-ai-model")
 async def inference_upload(
     background_tasks: BackgroundTasks,
@@ -34,7 +35,6 @@ async def inference_upload(
     date: str = Form(...),
     time: str = Form(...),
     video: UploadFile = File(...),
-    # thumbnail: str = File(...),
     save_video: bool = Form(True),
     token: str = Depends(JWTBearer()),
     db: Session = Depends(get_db)
@@ -49,6 +49,7 @@ async def inference_upload(
     )
 
 ## acc
+# Untuk menjalankan proses deteksi Ai dari image/images
 @router.post("/api/run-ai-model-images")
 async def inference_upload_images(
     background_tasks: BackgroundTasks,
@@ -67,6 +68,8 @@ async def inference_upload_images(
     )
 
 # acc
+# Untuk streaming SSE 
+# Ditampilkan fe di widget progress running AI model
 @router.get("/api/inference-status/{job_id}")
 async def get_inference_status(job_id: str):
     async def event_generator():
@@ -92,6 +95,7 @@ async def get_inference_status(job_id: str):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 # acc
+# Update settings
 @router.post("/api/set-detection-parameter")
 async def parameter_detection(
     payload: DetectionParameter, 
@@ -103,6 +107,7 @@ async def parameter_detection(
     return set_parameters(payload, user_id, db)
 
 # acc
+# Get settings
 @router.get("/api/get-detection-parameter")
 async def get_detection_parameter(
     token: str = Depends(JWTBearer()),
@@ -111,8 +116,6 @@ async def get_detection_parameter(
     token_payload = decodeJWT(token)
     user_id = token_payload.get("user_id")
     return get_parameters(user_id, db)
-
-
 
 # acc
 @router.get("/api/get-list-detection-result")
@@ -124,6 +127,8 @@ async def get_detection_result(
     return get_detection_results_by_job_id(job_id, db)
 
 # acc
+# Get hasil deteksi yang belum di pilih berdasarkan stored status [stored, not stored, not decided]
+# Jika hasilnya not decided maka akan tampil di widget informasi running AI model
 @router.get("/api/get-not-decided-detection")
 async def get_not_decided_detection_data(
     token: str = Depends(JWTBearer()),
@@ -154,7 +159,7 @@ async def detection_list_data(
     user_id = payload.get("user_id")
     return get_detection_list(user_id, page, limit, db)
 
-# # for dahsboard stat
+# for dahsboard stat
 @router.get("/api/detection-result-list-data")
 async def detection_result_list_data(
     token: str = Depends(JWTBearer()),
@@ -169,9 +174,10 @@ async def compliance_stats(
     search: str = Query(None),
     startDate: str = Query(None),
     endDate: str = Query(None),
+    lang: str = Query("id"),
     token: str = Depends(JWTBearer()),
     db: Session = Depends(get_db)
 ):
     payload = decodeJWT(token)
     user_id = payload.get("user_id")
-    return get_compliance_stats_service(user_id, search, startDate, endDate, db)
+    return get_compliance_stats_service(user_id, search, startDate, endDate, db, lang)

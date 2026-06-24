@@ -134,22 +134,21 @@ def run_inference(video_path, save_video=True, metadata=None):
             if save_video and writer: writer.release()
 
             filtered_compilance_res = {}
+            # pid adalah person ID
             for pid, res in compilance_res.items():
                 person = person_states.get(pid, {})
                 if person.get("bottom_touched", False):
                     filtered_compilance_res[pid] = res
 
-            compilance_res = filtered_compilance_res
-
             if job_id:
                 update_job_info_db(job_id, status="Done", video_result_path=output_path)
-                create_detection_results_db(job_id, compilance_res)
+                create_detection_results_db(job_id,  filtered_compilance_res)
 
             final_data = {"status": "Done", "frame": frame_count, "total_frames": total_frames}
             yield f"data: {json.dumps(final_data)}\n\n"
         except Exception as e:
             if cap: cap.release()
             if save_video and writer: writer.release()
-            yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
+            yield f"data: {json.dumps({'status': 'Error', 'message': str(e)})}\n\n"
 
     return total_frames, fps, duration, inference_generator()

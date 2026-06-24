@@ -14,7 +14,6 @@ def process_video_task(job_id, gen, tmp_path):
                 inference_jobs[job_id]["status"] = "Done"
                 inference_jobs[job_id]["result"] = data_dict
                 inference_jobs[job_id]["new_event"] = True
-                
                 # Update DB to Done
                 # update_job_info_db(job_id, status="Done", total_frames=data_dict.get("total_frames"))
                 
@@ -42,3 +41,6 @@ def process_video_task(job_id, gen, tmp_path):
                     os.remove(p)
         elif tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+        # Hapus job dari memori. sleep(3) di atas sudah memberi waktu SSE untuk mengirim event terakhir ke front-end sebelum entry dibuang.
+        inference_jobs.pop(job_id, None)

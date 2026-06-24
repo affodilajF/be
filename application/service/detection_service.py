@@ -14,7 +14,6 @@ from database.db_models import DetectionJobs, Setting, DetectionResult
 from database.database import SessionLocal
 
 TMP_DIR = "tmp"
-THUMBNAIL_DIR = "tmp_thumbnail"
 WIB = timezone(timedelta(hours=7))
 
 async def handle_inference_upload(
@@ -27,10 +26,9 @@ async def handle_inference_upload(
     user_id: str,
     db: Session
 ):
-    print("handle inference upload")
+    print("handle inference upload for video")
     timestamp = datetime.now(WIB).strftime("%Y%m%d_%H%M%S")
     os.makedirs(TMP_DIR, exist_ok=True)
-    os.makedirs(THUMBNAIL_DIR, exist_ok=True)
     job_id = str(uuid.uuid4())
 
     tmp_path = os.path.join(TMP_DIR, f"uploaded_{timestamp}_{video.filename}")
@@ -116,7 +114,6 @@ async def handle_inference_upload_images(
     print(f"handle inference upload images: {len(images)} images")
     timestamp = datetime.now(WIB).strftime("%Y%m%d_%H%M%S")
     os.makedirs(TMP_DIR, exist_ok=True)
-    os.makedirs(THUMBNAIL_DIR, exist_ok=True)
     job_id = str(uuid.uuid4())
 
     tmp_paths = []
@@ -130,9 +127,9 @@ async def handle_inference_upload_images(
     # Combine date and time
     try:
         # Assuming format YYYY-MM-DD HH:MM:SS from client
-        video_dt = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M:%S").replace(tzinfo=WIB)
+        image_dt = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M:%S").replace(tzinfo=WIB)
     except:
-        video_dt = datetime.now(WIB).replace(microsecond=0)
+        image_dt = datetime.now(WIB).replace(microsecond=0)
 
     metadata = {
         "job_id": job_id,
@@ -140,28 +137,28 @@ async def handle_inference_upload_images(
         "date": date,
         "time": time,
         "user_id": user_id,
-        "data_datetime": video_dt.isoformat(),
+        "data_datetime": image_dt.isoformat(),
         "created_at": datetime.now(WIB).replace(microsecond=0).isoformat()
     }
 
     # Panggil run_inference_images
-    total_frames, fps, duration, gen = run_inference_images(tmp_paths, metadata=metadata)
+    total_frames, gen = run_inference_images(tmp_paths, metadata=metadata)
     
-    video_dt_end = video_dt # For image, end is same as start
+    image_dt_end = image_dt # For image, end is same as start
 
     # Create new detection job in database
     new_detection = DetectionJobs(
         id=job_id,
         user_id=int(user_id),
         name=name,
-        data_datetime=video_dt,
+        data_datetime=image_dt,
         source_type="IMAGE",
         job_status="Running",
         stored_status="Not Decided", 
         total_frames = total_frames,
-        video_fps = fps,
-        video_duration = duration,
-        data_datetime_end = video_dt_end,
+        # video_fps = None,
+        # video_duration = None,
+        data_datetime_end = image_dt_end,
         created_at = datetime.now(WIB).replace(microsecond=0)
     )
     db.add(new_detection)
@@ -405,7 +402,7 @@ def update_detection_store_status(store_status, job_id: str, db: Session):
 
 
 
-def get_compliance_stats_service(user_id: str, search: str, start_date: str, end_date: str, db: Session):
+def get_compliance_stats_service(user_id: str, search: str, start_date: str, end_date: str, db: Session, lang: str = "id"):
     # Fetch detections joined with jobs
     query = db.query(DetectionResult, DetectionJobs).join(DetectionJobs).filter(
         DetectionJobs.user_id == int(user_id),
@@ -548,7 +545,7 @@ def get_compliance_stats_service(user_id: str, search: str, start_date: str, end
         })
 
     # Generate verbal summary
-    verbal_summary = generate_verbal_summary_python(stats, search, start_date, end_date)
+    verbal_summary = generate_verbal_summary_python(stats, search, start_date, end_date, lang)
 
     # Separate trends from stats
     trends = {
@@ -565,33 +562,61 @@ def get_compliance_stats_service(user_id: str, search: str, start_date: str, end
         }
     }
 
-def generate_verbal_summary_python(stats, search, start_date, end_date):
+def generate_verbal_summary_python(stats, search, start_date, end_date, lang="id"):
+    # Normalisasi: apa pun selain "en" dianggap "id"
+    is_en = (lang == "en")
+
     if stats["totalDetections"] == 0:
-        return "No data found for the selected filters."
+        return "No data found for the selected filters." if is_en else "Tidak ada data untuk filter yang dipilih."
+
+    # Penghubung daftar ("A, B and C" / "A, B dan C")
+    conj = " and " if is_en else " dan "
+
+    def join_names(items):
+        if len(items) > 1:
+            return ", ".join(items[:-1]) + conj + items[-1]
+        return items[0]
+
+    # Nama tampilan kelas APD per bahasa
+    PPE_LABELS_ID = {
+        'Apron': 'Apron', 'Gloves': 'Sarung Tangan', 'Boots': 'Sepatu Boot',
+        'Mask': 'Masker', 'Hairnet': 'Hairnet',
+    }
+    def ppe_label(name):
+        return name if is_en else PPE_LABELS_ID.get(name, name)
 
     # 1. Date Range Detection
     sorted_days = sorted(stats["dailyTrend"], key=lambda x: x["date"])
     min_date = sorted_days[0]["date"] if sorted_days else None
-    max_date = sorted_days[-1]["date"] if sorted_days else None
 
     # Get Today in WIB
     today_wib = datetime.now(WIB).strftime("%Y-%m-%d")
+
+    MONTHS_ID = {
+        1: "Januari", 2: "Februari", 3: "Maret", 4: "April", 5: "Mei", 6: "Juni",
+        7: "Juli", 8: "Agustus", 9: "September", 10: "Oktober", 11: "November", 12: "Desember",
+    }
 
     def format_date_str(d_str):
         if not d_str: return "N/A"
         try:
             dt = datetime.strptime(d_str, "%Y-%m-%d")
-            return dt.strftime("%B %d, %Y")
+            if is_en:
+                return dt.strftime("%B %d, %Y")
+            return f"{dt.day} {MONTHS_ID[dt.month]} {dt.year}"
         except:
             return d_str
 
     effective_end_date = end_date or today_wib
-    
+
     observation_period = ""
     if min_date:
         start_fmt = format_date_str(start_date or min_date)
         end_fmt = format_date_str(effective_end_date)
-        observation_period = f"over the observation period of **{start_fmt} to {end_fmt}**"
+        if is_en:
+            observation_period = f"over the observation period of **{start_fmt} to {end_fmt}**"
+        else:
+            observation_period = f"selama periode pengamatan **{start_fmt} hingga {end_fmt}**"
 
     # 2. PPE Violations Analysis
     ppe_fail_list = [
@@ -602,46 +627,58 @@ def generate_verbal_summary_python(stats, search, start_date, end_date):
         {"name": 'Hairnet', "fail": stats["hairnet"]["fail"]},
     ]
 
-    VIOLATION_RECOMMENDATIONS = {
+    VIOLATION_RECOMMENDATIONS_EN = {
         'Gloves': "==glove availability at entrance be reviewed==",
         'Mask': "==workers be reminded of mask protocol before entering==",
         'Hairnet': "==hairnet stock at changing area be checked==",
         'Boots': "==boot storage and sizing availability be inspected==",
         'Apron': "==apron supply be ensured sufficient per shift==",
     }
+    VIOLATION_RECOMMENDATIONS_ID = {
+        'Gloves': "==ketersediaan sarung tangan di pintu masuk ditinjau kembali==",
+        'Mask': "==pekerja diingatkan mengenai protokol masker sebelum masuk==",
+        'Hairnet': "==stok penutup kepala di area ganti diperiksa==",
+        'Boots': "==ketersediaan penyimpanan dan ukuran sepatu boot diperiksa==",
+        'Apron': "==pasokan celemek dipastikan cukup per shift==",
+    }
+    rec_map = VIOLATION_RECOMMENDATIONS_EN if is_en else VIOLATION_RECOMMENDATIONS_ID
 
     max_fail = max(p["fail"] for p in ppe_fail_list)
     min_fail = min(p["fail"] for p in ppe_fail_list)
 
     most_frequent_violations = [p for p in ppe_fail_list if p["fail"] == max_fail and p["fail"] > 0]
-    most_frequent_names = [f"**{p['name']}**" for p in most_frequent_violations]
-    highest_compliance_items = [f"**{p['name']}**" for p in ppe_fail_list if p["fail"] == min_fail and p["fail"] == 0]
+    most_frequent_names = [f"**{ppe_label(p['name'])}**" for p in most_frequent_violations]
+    highest_compliance_items = [f"**{ppe_label(p['name'])}**" for p in ppe_fail_list if p["fail"] == min_fail and p["fail"] == 0]
 
     compliant_rate = round((stats["totalCompliant"] / stats["totalDetections"]) * 100) if stats["totalDetections"] > 0 else 0
     violation_rate = round((stats["totalViolations"] / stats["totalDetections"]) * 100) if stats["totalDetections"] > 0 else 0
 
     # Paragraph 1: Overview & PPE
-    summary = f"Based on all-time recorded data {observation_period}, a total of **{stats['totalDetections']} workers** were observed, with **{stats['totalCompliant']} workers ({compliant_rate}%)** fully compliant and **{stats['totalViolations']} workers ({violation_rate}%)** recorded with at least one PPE violation. "
+    if is_en:
+        summary = f"Based on all-time recorded data {observation_period}, a total of **{stats['totalDetections']} workers** were observed, with **{stats['totalCompliant']} workers ({compliant_rate}%)** fully compliant and **{stats['totalViolations']} workers ({violation_rate}%)** recorded with at least one PPE violation. "
+    else:
+        summary = f"Berdasarkan seluruh data yang tercatat {observation_period}, sebanyak **{stats['totalDetections']} pekerja** terpantau, dengan **{stats['totalCompliant']} pekerja ({compliant_rate}%)** patuh penuh dan **{stats['totalViolations']} pekerja ({violation_rate}%)** tercatat memiliki minimal satu pelanggaran APD. "
 
     if most_frequent_names:
-        if len(most_frequent_names) > 1:
-            name_list = ", ".join(most_frequent_names[:-1]) + " and " + most_frequent_names[-1]
-        else:
-            name_list = most_frequent_names[0]
+        name_list = join_names(most_frequent_names)
 
         if len(most_frequent_violations) == 1:
-            recommendation = VIOLATION_RECOMMENDATIONS.get(most_frequent_violations[0]["name"], "==availability and protocol adherence be reviewed==")
+            default_rec = "==availability and protocol adherence be reviewed==" if is_en else "==ketersediaan dan kepatuhan protokol ditinjau kembali=="
+            recommendation = rec_map.get(most_frequent_violations[0]["name"], default_rec)
         else:
-            recommendation = "==availability and protocol adherence for these items be reviewed=="
+            recommendation = "==availability and protocol adherence for these items be reviewed==" if is_en else "==ketersediaan dan kepatuhan protokol untuk item-item ini ditinjau kembali=="
 
-        summary += f"The most frequent violation was the absence of {name_list} ({max_fail} cases), and it is recommended that {recommendation}. "
+        if is_en:
+            summary += f"The most frequent violation was the absence of {name_list} ({max_fail} cases), and it is recommended that {recommendation}. "
+        else:
+            summary += f"Pelanggaran paling sering adalah ketiadaan {name_list} ({max_fail} kasus), dan disarankan agar {recommendation}. "
 
     if highest_compliance_items:
-        if len(highest_compliance_items) > 1:
-            h_list = ", ".join(highest_compliance_items[:-1]) + " and " + highest_compliance_items[-1]
+        h_list = join_names(highest_compliance_items)
+        if is_en:
+            summary += f"{h_list} recorded no violations throughout the observation period.\n\n"
         else:
-            h_list = highest_compliance_items[0]
-        summary += f"{h_list} recorded no violations throughout the observation period.\n\n"
+            summary += f"{h_list} tidak mencatat pelanggaran sepanjang periode pengamatan.\n\n"
     else:
         summary += "\n\n"
 
@@ -650,22 +687,31 @@ def generate_verbal_summary_python(stats, search, start_date, end_date):
         best_day = max(sorted_days, key=lambda x: x["rate"])
         worst_day = min(sorted_days, key=lambda x: x["rate"])
 
-        summary += f"Daily trend analysis shows the best compliance was recorded on {format_date_str(best_day['date'])} (**{best_day['rate']}%**), while the worst was on {format_date_str(worst_day['date'])} (**{worst_day['rate']}%**).\n\n"
+        if is_en:
+            summary += f"Daily trend analysis shows the best compliance was recorded on {format_date_str(best_day['date'])} (**{best_day['rate']}%**), while the worst was on {format_date_str(worst_day['date'])} (**{worst_day['rate']}%**).\n\n"
+        else:
+            summary += f"Analisis tren harian menunjukkan kepatuhan terbaik tercatat pada {format_date_str(best_day['date'])} (**{best_day['rate']}%**), sedangkan terburuk pada {format_date_str(worst_day['date'])} (**{worst_day['rate']}%**).\n\n"
 
     # Paragraph 3: Hourly Trend
     active_hours = [h for h in stats["hourlyTrend"] if h["total"] > 0]
     if active_hours:
         zero_hours = [f"**{str(h['hour']).zfill(2)}:00**" for h in active_hours if h["rate"] == 0]
 
-        summary += "Hourly trend analysis reveals compliance rate was variable throughout the day, "
+        if is_en:
+            summary += "Hourly trend analysis reveals compliance rate was variable throughout the day, "
+        else:
+            summary += "Analisis tren per jam mengungkapkan tingkat kepatuhan bervariasi sepanjang hari, "
 
         if zero_hours:
-            if len(zero_hours) > 1:
-                z_list = ", ".join(zero_hours[:-1]) + " and " + zero_hours[-1]
+            z_list = join_names(zero_hours)
+            if is_en:
+                summary += f"with notable drops to **0%** at {z_list}. ==Targeted supervision is recommended during these hours== to improve overall compliance."
             else:
-                z_list = zero_hours[0]
-            summary += f"with notable drops to **0%** at {z_list}. ==Targeted supervision is recommended during these hours== to improve overall compliance."
+                summary += f"dengan penurunan mencolok hingga **0%** pada {z_list}. ==Pengawasan terarah disarankan pada jam-jam tersebut== untuk meningkatkan kepatuhan secara keseluruhan."
         else:
-            summary += "with no hours showing complete non-compliance. ==Continued monitoring is recommended== to identify recurring low-compliance patterns."
+            if is_en:
+                summary += "with no hours showing complete non-compliance. ==Continued monitoring is recommended== to identify recurring low-compliance patterns."
+            else:
+                summary += "tanpa ada jam yang menunjukkan ketidakpatuhan total. ==Pemantauan berkelanjutan disarankan== untuk mengidentifikasi pola kepatuhan rendah yang berulang."
 
     return summary

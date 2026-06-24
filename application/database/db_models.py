@@ -64,9 +64,9 @@ class DetectionJobs(Base):
     stored_status = Column(String, default="Not Decided")  # Not Decided, Stored, Not Stored
 
     # video info
-    total_frames = Column(Integer, default=0)
-    video_fps = Column(Float)
-    video_duration = Column(Float)  # in seconds
+    total_frames = Column(Integer, default=None)
+    video_fps = Column(Float, default=None)
+    video_duration = Column(Float, default=None)  # in seconds
 
     data_datetime_end = Column(DateTime)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

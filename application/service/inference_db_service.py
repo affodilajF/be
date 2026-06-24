@@ -24,7 +24,7 @@ def update_job_info_db(job_id: str, status: str = None, total_frames: int = None
             if job:
                 if status: job.job_status = status
                 if total_frames is not None: job.total_frames = total_frames
-                if video_result_path: job.video_result_path = video_result_path
+                # if video_result_path: job.video_result_path = video_result_path
                 db.commit()
         except:
             db.rollback()

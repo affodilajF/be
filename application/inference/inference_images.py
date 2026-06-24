@@ -22,9 +22,9 @@ def run_inference_images(image_paths, metadata=None):
     bottom_percent = settings["bottom_roi"]
 
     total_frames = len(image_paths)
-    video_start_dt_str = metadata.get("data_datetime") if metadata else None
-    video_start_dt = datetime.fromisoformat(video_start_dt_str) if video_start_dt_str else None
-    current_dt = video_start_dt.replace(microsecond=0) if video_start_dt else datetime.now().replace(microsecond=0)
+    img_start_dt_str = metadata.get("data_datetime") if metadata else None
+    img_start_dt = datetime.fromisoformat(img_start_dt_str) if img_start_dt_str else None
+    current_dt = img_start_dt.replace(microsecond=0) if img_start_dt else datetime.now().replace(microsecond=0)
 
     def inference_generator():
         try:
@@ -80,4 +80,4 @@ def run_inference_images(image_paths, metadata=None):
         except Exception as e:
             yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
 
-    return total_frames, 1, 0, inference_generator()
+    return total_frames, inference_generator()
