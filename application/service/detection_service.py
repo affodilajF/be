@@ -637,9 +637,9 @@ def generate_verbal_summary_python(stats, search, start_date, end_date, lang="id
     VIOLATION_RECOMMENDATIONS_ID = {
         'Gloves': "==ketersediaan sarung tangan di pintu masuk ditinjau kembali==",
         'Mask': "==pekerja diingatkan mengenai protokol masker sebelum masuk==",
-        'Hairnet': "==stok penutup kepala di area ganti diperiksa==",
+        'Hairnet': "==stok hairnet di area ganti diperiksa==",
         'Boots': "==ketersediaan penyimpanan dan ukuran sepatu boot diperiksa==",
-        'Apron': "==pasokan celemek dipastikan cukup per shift==",
+        'Apron': "==pasokan apron dipastikan cukup per shift==",
     }
     rec_map = VIOLATION_RECOMMENDATIONS_EN if is_en else VIOLATION_RECOMMENDATIONS_ID
 
