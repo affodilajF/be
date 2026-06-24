@@ -1,6 +1,7 @@
 from ultralytics import YOLO
 import cv2, os
 import json
+import time
 from datetime import datetime
 from service.inference_db_service import get_detection_settings_db, update_job_info_db, create_detection_results_db
 from .inference_utils import (
@@ -31,6 +32,9 @@ def run_inference_images(image_paths, metadata=None):
             compilance_res = {}
             global_person_counter = 0
 
+            total_inference_time = 0.0  # akumulasi waktu predict semua gambar (detik)
+            inferred_count = 0          # jumlah gambar yang benar-benar di-predict
+
             for idx, img_path in enumerate(image_paths):
                 frame = cv2.imread(img_path)
                 if frame is None: continue
@@ -39,7 +43,10 @@ def run_inference_images(image_paths, metadata=None):
                 roi_top = int(h * (top_percent / 100))
                 roi_bottom = int(h * (bottom_percent / 100))
 
+                start_time = time.perf_counter()
                 results = model.predict(frame, verbose=False)
+                total_inference_time += time.perf_counter() - start_time
+                inferred_count += 1
                 r = results[0]
                 
                 boxes = r.boxes.xyxy.cpu().numpy()
@@ -70,6 +77,15 @@ def run_inference_images(image_paths, metadata=None):
                 
                 progress_data = {"status": "Running", "frame": idx + 1, "total_frames": total_frames}
                 yield f"data: {json.dumps(progress_data)}\n\n"
+
+            avg_inference_time = (total_inference_time / inferred_count) if inferred_count else 0.0
+            model_name = os.path.basename(MODEL_PATH)
+            with open("inference_time_log.txt", "a", encoding="utf-8") as f:
+                f.write(
+                    f"model={model_name} | images={inferred_count} | "
+                    f"total_time={total_inference_time:.3f}s | "
+                    f"avg_time={avg_inference_time:.3f}s ({avg_inference_time * 1000:.1f}ms/image)\n"
+                )
 
             if job_id:
                 update_job_info_db(job_id, status="Done")
