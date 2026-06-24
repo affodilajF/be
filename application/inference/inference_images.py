@@ -39,7 +39,7 @@ def run_inference_images(image_paths, metadata=None):
                 roi_top = int(h * (top_percent / 100))
                 roi_bottom = int(h * (bottom_percent / 100))
 
-                results = model(frame, verbose=False)
+                results = model.predict(frame, verbose=False)
                 r = results[0]
                 
                 boxes = r.boxes.xyxy.cpu().numpy()
