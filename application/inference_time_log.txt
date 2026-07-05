@@ -1,0 +1,102 @@
+model=run1.pt | images=240 | total_time=25.099s | avg_time=0.105s (104.6ms/image)
+model=run2.pt | images=240 | total_time=24.725s | avg_time=0.103s (103.0ms/image)
+model=run3.pt | images=240 | total_time=23.789s | avg_time=0.099s (99.1ms/image)
+model=run4.pt | images=240 | total_time=24.232s | avg_time=0.101s (101.0ms/image)
+model=run5.pt | images=240 | total_time=25.635s | avg_time=0.107s (106.8ms/image)
+model=run6.pt | images=240 | total_time=24.423s | avg_time=0.102s (101.8ms/image)
+
+
+// RUN 1 - lampau 
+mAP@50    : 0.9632504274879482
+mAP@50-95 : 0.7741600593388257
+Precision : 0.9578673183336602
+Recall    : 0.9321700802426939
+
+apron      P=0.974  R=0.985  mAP50=0.993  mAP50-95=0.888
+gloves     P=0.876  R=0.828  mAP50=0.906  mAP50-95=0.614
+boots      P=0.972  R=0.956  mAP50=0.986  mAP50-95=0.808
+mask       P=0.939  R=0.836  mAP50=0.905  mAP50-95=0.552
+hairnet    P=0.993  R=0.996  mAP50=0.995  mAP50-95=0.833
+person     P=0.992  R=0.993  mAP50=0.995  mAP50-95=0.950
+
+RUN 1 -----------
+mAP@50    : 0.9632504274879482
+mAP@50-95 : 0.7741600593388257
+Precision : 0.9578673183336602
+Recall    : 0.9321700802426939
+
+apron      P=0.974  R=0.985  mAP50=0.993  mAP50-95=0.888
+gloves     P=0.876  R=0.828  mAP50=0.906  mAP50-95=0.614
+boots      P=0.972  R=0.956  mAP50=0.986  mAP50-95=0.808
+mask       P=0.939  R=0.836  mAP50=0.905  mAP50-95=0.552
+hairnet    P=0.993  R=0.996  mAP50=0.995  mAP50-95=0.833
+person     P=0.992  R=0.993  mAP50=0.995  mAP50-95=0.950
+
+RUN 2 -----------
+mAP@50    : 0.9535920997675746
+mAP@50-95 : 0.7609819849330773
+Precision : 0.9409943838845732
+Recall    : 0.9299121722687346
+apron      P=0.966  R=0.992  mAP50=0.995  mAP50-95=0.882
+gloves     P=0.835  R=0.849  mAP50=0.890  mAP50-95=0.583
+boots      P=0.958  R=0.946  mAP50=0.982  mAP50-95=0.807
+mask       P=0.923  R=0.804  mAP50=0.864  mAP50-95=0.514
+hairnet    P=0.984  R=0.992  mAP50=0.995  mAP50-95=0.824
+person     P=0.980  R=0.996  mAP50=0.995  mAP50-95=0.955
+
+RUN 3 -----------
+mAP@50    : 0.9599907344740651
+mAP@50-95 : 0.7573425747463313
+Precision : 0.9605485744484207
+Recall    : 0.9172773034430435
+apron      P=0.989  R=0.977  mAP50=0.994  mAP50-95=0.860
+gloves     P=0.889  R=0.804  mAP50=0.895  mAP50-95=0.586
+boots      P=0.976  R=0.943  mAP50=0.987  mAP50-95=0.806
+mask       P=0.924  R=0.797  mAP50=0.895  mAP50-95=0.529
+hairnet    P=0.996  R=0.990  mAP50=0.995  mAP50-95=0.820
+person     P=0.989  R=0.993  mAP50=0.995  mAP50-95=0.944
+
+RUN 4 -----------
+mAP@50    : 0.9667253095123485
+mAP@50-95 : 0.781550438910736
+Precision : 0.9546713716275015
+Recall    : 0.9423961317960968
+apron      P=0.974  R=0.977  mAP50=0.985  mAP50-95=0.890
+gloves     P=0.857  R=0.871  mAP50=0.909  mAP50-95=0.621
+boots      P=0.954  R=0.954  mAP50=0.987  mAP50-95=0.808
+mask       P=0.955  R=0.865  mAP50=0.929  mAP50-95=0.580
+hairnet    P=0.992  R=0.996  mAP50=0.995  mAP50-95=0.833
+person     P=0.996  R=0.991  mAP50=0.995  mAP50-95=0.958
+
+RUN 5 -----------
+mAP@50    : 0.962457470419281
+mAP@50-95 : 0.762342325622538
+Precision : 0.9382370286693636
+Recall    : 0.9452874937460005
+apron      P=0.963  R=0.996  mAP50=0.994  mAP50-95=0.860
+gloves     P=0.835  R=0.872  mAP50=0.907  mAP50-95=0.592
+boots      P=0.969  R=0.964  mAP50=0.987  mAP50-95=0.804
+mask       P=0.901  R=0.859  mAP50=0.898  mAP50-95=0.539
+hairnet    P=0.980  R=0.992  mAP50=0.995  mAP50-95=0.831
+person     P=0.981  R=0.989  mAP50=0.995  mAP50-95=0.949
+
+
+RUN 6 -----------
+mAP@50    : 0.9665532223479362
+mAP@50-95 : 0.7806264665695672
+Precision : 0.9533913841635601
+Recall    : 0.9405366268472353
+apron      P=0.977  R=0.985  mAP50=0.994  mAP50-95=0.903
+gloves     P=0.854  R=0.883  mAP50=0.922  mAP50-95=0.626
+boots      P=0.968  R=0.959  mAP50=0.982  mAP50-95=0.814
+mask       P=0.930  R=0.831  mAP50=0.911  mAP50-95=0.550
+hairnet    P=0.996  R=0.993  mAP50=0.995  mAP50-95=0.831
+person     P=0.995  R=0.993  mAP50=0.995  mAP50-95=0.959
+model=run6.pt | images=4 | total_time=1.121s | avg_time=0.280s (280.3ms/image)
+model=run6.pt | images=4 | total_time=0.879s | avg_time=0.220s (219.9ms/image)
+model=run6.pt | images=3 | total_time=0.586s | avg_time=0.195s (195.2ms/image)
+model=run6.pt | images=4 | total_time=0.823s | avg_time=0.206s (205.8ms/image)
+model=run6.pt | images=4 | total_time=0.929s | avg_time=0.232s (232.3ms/image)
+model=run6.pt | images=4 | total_time=1.311s | avg_time=0.328s (327.6ms/image)
+model=run6.pt | images=4 | total_time=1.154s | avg_time=0.289s (288.6ms/image)
+model=run6.pt | images=4 | total_time=0.562s | avg_time=0.140s (140.4ms/image)
