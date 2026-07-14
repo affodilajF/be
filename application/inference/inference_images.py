@@ -11,16 +11,19 @@ from .inference_utils import (
 MODEL_PATH = r"models/best.pt"
 
 def run_inference_images(image_paths, metadata=None):
+    # model load
     model = YOLO(MODEL_PATH)
     model.verbose = False
 
     user_id = metadata.get("user_id") if metadata else None
     job_id = metadata.get("job_id") if metadata else None
     
+    # roi
     settings = get_detection_settings_db(int(user_id)) if user_id else {"top_roi": 25, "bottom_roi": 75}
     top_percent = settings["top_roi"]
     bottom_percent = settings["bottom_roi"]
 
+    # frames, img start date
     total_frames = len(image_paths)
     img_start_dt_str = metadata.get("data_datetime") if metadata else None
     img_start_dt = datetime.fromisoformat(img_start_dt_str) if img_start_dt_str else None
@@ -35,10 +38,12 @@ def run_inference_images(image_paths, metadata=None):
                 frame = cv2.imread(img_path)
                 if frame is None: continue
 
+                # roi
                 h, w = frame.shape[:2]
                 roi_top = int(h * (top_percent / 100))
                 roi_bottom = int(h * (bottom_percent / 100))
 
+                # model predict
                 results = model.predict(frame, verbose=False)
                 r = results[0]
                 
@@ -54,19 +59,26 @@ def run_inference_images(image_paths, metadata=None):
                     global_person_counter += 1
                     px1, py1, px2, py2 = map(int, box)
                     
+                    # if person didalam zona
                     if py2 >= roi_top and py1 <= roi_bottom:
                         compilance_res[person_id] = {
                             "apron": False, "gloves": False, "boots": False, 
                             "mask": False, "hairnet": False, "detection_time": current_dt
                         }
                         
+                        # compilance_res ini pass object by reference, yg dioper adalah referensi ke objek dict yang sama di memori (bukan salinanya)
+                        # dictionary -> mutable -> pass by ref
+                        # int/str -> immutable -> pass by value
                         check_apd(person_id, box, boxes, classes, compilance_res, model_names, current_dt=current_dt)
                         
-                        missing = any(not compilance_res[person_id].get(k, False) for k in ["apron", "gloves", "boots", "mask", "hairnet"])
-                        if missing:
-                            img_data = save_person_crop(person_id, box, frame, r)
-                            if img_data:
-                                compilance_res[person_id]["image_data"] = img_data
+                        # missing = any(not compilance_res[person_id].get(k, False) for k in ["apron", "gloves", "boots", "mask", "hairnet"])
+                        # if missing:
+                        #     img_data = save_person_crop(person_id, box, frame, r)
+                        #     if img_data:
+                        #         compilance_res[person_id]["image_data"] = img_data
+                        img_data = save_person_crop(person_id, box, frame, r)
+                        if img_data:
+                            compilance_res[person_id]["image_data"] = img_data
                 
                 progress_data = {"status": "Running", "frame": idx + 1, "total_frames": total_frames}
                 yield f"data: {json.dumps(progress_data)}\n\n"

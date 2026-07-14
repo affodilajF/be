@@ -6,6 +6,7 @@ from service.inference_db_service import update_job_info_db
 
 def process_video_task(job_id, gen, tmp_path):
     try:
+        # auto nunggu sse_data dari gen (generator)
         for sse_data in gen:
             # Mengambil data dict dari string "data: {...}\n\n"
             data_dict = json.loads(sse_data.replace("data: ", "").strip())
@@ -31,6 +32,7 @@ def process_video_task(job_id, gen, tmp_path):
                 inference_jobs[job_id]["new_event"] = True
 
                 # Update total_frames di DB jika ada perubahan/info baru
+                # coba nanti hapus 
                 if "total_frames" in data_dict:
                     update_job_info_db(job_id, total_frames=data_dict["total_frames"])
     finally:

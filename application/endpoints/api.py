@@ -26,7 +26,7 @@ from inference.jobs import inference_jobs
 # router = APIRouter(dependencies=[Depends(JWTBearer())])
 router = APIRouter()
 
-## acc
+## used
 # Untuk menjalankan proses deteksi AI dari video
 @router.post("/api/run-ai-model")
 async def inference_upload(
@@ -48,7 +48,7 @@ async def inference_upload(
         background_tasks, name, date, time, video, save_video, user_id, db
     )
 
-## acc
+## used
 # Untuk menjalankan proses deteksi Ai dari image/images
 @router.post("/api/run-ai-model-images")
 async def inference_upload_images(
@@ -67,12 +67,15 @@ async def inference_upload_images(
         background_tasks, name, date, time, images, user_id, db
     )
 
-# acc
+# used
 # Untuk streaming SSE 
 # Ditampilkan fe di widget progress running AI model
+# Ada papan pengumuman namanya "inference_jobs" dan kalo ada yg ngases endpoint ini maka dia akan nyariin
 @router.get("/api/inference-status/{job_id}")
 async def get_inference_status(job_id: str):
     async def event_generator():
+        # hanya berjalan kalau ada yg mengakses endpoint ini
+        # kalo fe gak connect ya tidak jalan samsek
         while True:
             job = inference_jobs.get(job_id)
             if not job:
@@ -80,6 +83,7 @@ async def get_inference_status(job_id: str):
                 break
             
             if job["new_event"]:
+                # new event dibikin True di tasks.py
                 job["new_event"] = False
                 if job["status"] == "Done":
                     yield f"data: {json.dumps(job['result'])}\n\n"
@@ -94,7 +98,7 @@ async def get_inference_status(job_id: str):
             
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-# acc
+# used
 # Update settings
 @router.post("/api/set-detection-parameter")
 async def parameter_detection(
@@ -106,7 +110,7 @@ async def parameter_detection(
     user_id = token_payload.get("user_id")
     return set_parameters(payload, user_id, db)
 
-# acc
+# used
 # Get settings
 @router.get("/api/get-detection-parameter")
 async def get_detection_parameter(
@@ -117,7 +121,7 @@ async def get_detection_parameter(
     user_id = token_payload.get("user_id")
     return get_parameters(user_id, db)
 
-# acc
+# used di halaman Sistem Deteksi AI (by job id)
 @router.get("/api/get-list-detection-result")
 async def get_detection_result(
     job_id: str,
@@ -126,7 +130,7 @@ async def get_detection_result(
 ):
     return get_detection_results_by_job_id(job_id, db)
 
-# acc
+# used
 # Get hasil deteksi yang belum di pilih berdasarkan stored status [stored, not stored, not decided]
 # Jika hasilnya not decided maka akan tampil di widget informasi running AI model
 @router.get("/api/get-not-decided-detection")
@@ -138,7 +142,7 @@ async def get_not_decided_detection_data(
     user_id = payload.get("user_id")
     return get_not_decided_detection(user_id, db)
 
-# acc
+# used for storing detection (halaman Sistem Deteksi AI)
 @router.get("/api/set-detection-store-status")
 async def set_detection_store_status(
     job_id: str,
@@ -147,7 +151,7 @@ async def set_detection_store_status(
 ):
     return update_detection_store_status(store_status, job_id, db)
 
-# acc
+# used for history
 @router.get("/api/detection-list-data")
 async def detection_list_data(
     page: int = Query(1, ge=1),
@@ -159,7 +163,7 @@ async def detection_list_data(
     user_id = payload.get("user_id")
     return get_detection_list(user_id, page, limit, db)
 
-# for dahsboard stat
+# used for compilance dashboard as list deteksi 
 @router.get("/api/detection-result-list-data")
 async def detection_result_list_data(
     token: str = Depends(JWTBearer()),
@@ -169,6 +173,7 @@ async def detection_result_list_data(
     user_id = payload.get("user_id")
     return get_detection_result_list(user_id, db)
 
+# used for compilance dashboard 
 @router.get("/api/compliance-stats")
 async def compliance_stats(
     search: str = Query(None),

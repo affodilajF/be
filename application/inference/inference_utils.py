@@ -26,6 +26,7 @@ def draw_roi_lines(frame, roi_top, roi_bottom):
     cv2.putText(frame, "ROI BOTTOM", (10, roi_bottom - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
     return frame
 
+# check kelengkapan APD
 def check_apd(person_id, person_box, frame_boxes, frame_classes, compilance_res, model_names, overlap_thresh=0.8, current_dt=None):
     if person_id is None: return
     person_id = int(person_id)
@@ -73,9 +74,9 @@ def save_person_crop(person_id, person_box, frame, r):
                     if np.allclose(box.cpu().numpy(), person_box, atol=1e-3):
                         should_draw = True
             else:
-                if is_overlapping(box, person_box):
+                if is_overlapping(box, person_box, thresh=0.8):
                     should_draw = True
-            
+
             if should_draw:
                 ann.box_label(box, label, color=colors(cls, True))
 
@@ -87,6 +88,66 @@ def save_person_crop(person_id, person_box, frame, r):
     h, w = work_frame.shape[:2]
     px1, py1, px2, py2 = max(0, px1-pad), max(0, py1-pad), min(w, px2+pad), min(h, py2+pad)
     
+    crop = work_frame[py1:py2, px1:px2]
+    if crop.size > 0:
+        success, buffer = cv2.imencode(".jpg", crop)
+        if success:
+            return buffer.tobytes()
+    return None
+
+def save_person_crop_video(person_id, person_box, frame, r, compilance_res):
+    # Acuan kepatuhan person ini. Kalau belum ada recordnya -> tidak ada acuan
+    person_id_int = int(person_id) if person_id is not None else None
+    comp = compilance_res.get(person_id_int)
+    if comp is None:
+        return None
+
+    # Set APD yang tercatat True di compilance_res (abaikan metadata: detection_time, image_data, dll.)
+    compliant_set = {label for label, val in comp.items() if val is True}
+
+    # 1. Kumpulkan bbox person + APD yang overlap >=80% dengan person di frame ini
+    person_draw = None                 # (box, cls) untuk person yg dipilih
+    detected_boxes = []                # list (label, box, cls) APD yg overlap >=80%
+    detected_labels = set()
+
+    if r.boxes is not None:
+        for d in r.boxes:
+            box = d.xyxy[0]
+            cls = int(d.cls)
+            label = r.names[cls]
+
+            if label == "person":
+                if d.id is not None:
+                    if int(d.id) == person_id_int:
+                        person_draw = (box, cls)
+                elif np.allclose(box.cpu().numpy(), person_box, atol=1e-3):
+                    person_draw = (box, cls)
+            else:
+                if is_overlapping(box, person_box, thresh=0.8):
+                    detected_boxes.append((label, box, cls))
+                    detected_labels.add(label)
+
+    # 2. Konsistensi: APD di frame ini harus sama persis dengan yang tercatat di compilance_res.
+    #    Kalau tidak sesuai, frame ini bukan representasi kepatuhan -> None
+    if detected_labels != compliant_set:
+        return None
+
+    # 3. Gambar bbox person + APD yang konsisten
+    ann = Annotator(frame.copy(), line_width=2)
+    if person_draw is not None:
+        pbox, pcls = person_draw
+        ann.box_label(pbox, r.names[pcls], color=colors(pcls, True))
+    for label, box, cls in detected_boxes:
+        ann.box_label(box, label, color=colors(cls, True))
+
+    work_frame = ann.result()
+
+    # 4. Proses Crop
+    px1, py1, px2, py2 = map(int, person_box)
+    pad = 50
+    h, w = work_frame.shape[:2]
+    px1, py1, px2, py2 = max(0, px1-pad), max(0, py1-pad), min(w, px2+pad), min(h, py2+pad)
+
     crop = work_frame[py1:py2, px1:px2]
     if crop.size > 0:
         success, buffer = cv2.imencode(".jpg", crop)
